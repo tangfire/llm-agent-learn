@@ -18,6 +18,7 @@ class Settings:
     openai_timeout: float = float(os.getenv("OPENAI_TIMEOUT", "60"))
     chat_model: str = os.getenv("CHAT_MODEL", "gpt-4.1-mini")
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    embedding_dimension: int = int(os.getenv("EMBEDDING_DIMENSION", "256"))
     qdrant_path: str = os.getenv("QDRANT_PATH", "./data/qdrant")
     qdrant_collection_name: str = os.getenv(
         "QDRANT_COLLECTION_NAME", "rag_knowledge_base"

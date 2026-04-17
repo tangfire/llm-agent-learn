@@ -36,6 +36,9 @@ class AskResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     chat_model: str
+    chat_mode: str
     embedding_model: str
+    embedding_mode: str
     vector_store: str
     retrieval_mode: str
+    stored_chunks: int

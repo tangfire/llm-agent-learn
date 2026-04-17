@@ -18,3 +18,9 @@
 ## 当前项目
 
 - `projects/01-fastapi-minimal-chat/`: FastAPI 最小 LLM 服务
+- `projects/02-rag-knowledge-assistant/`: 第一版 RAG 知识库问答项目
+
+## 学习总计划
+
+- `AI_APP_12_WEEK_PLAN.md`: 已升级为竞争力路线图，聚焦高含金量项目与差异化能力
+- `AI_APP_MASTERY_ROADMAP.md`: 非时间限制的完整学习路线图，按模块推进
