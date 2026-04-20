@@ -5,6 +5,7 @@
 ## 目录约定
 
 - `projects/NN-topic-name/`: 每个独立练习项目
+- `notes/phase-xx-topic.md`: 每个阶段对应的学习笔记与口述稿
 - 每个项目内部固定保留：
 - `app/`: 服务代码
 - `app/api/`: 路由层
@@ -24,3 +25,4 @@
 
 - `AI_APP_12_WEEK_PLAN.md`: 已升级为竞争力路线图，聚焦高含金量项目与差异化能力
 - `AI_APP_MASTERY_ROADMAP.md`: 非时间限制的完整学习路线图，按模块推进
+- `notes/phase-01-foundation.md`: 阶段一学习笔记，对应 Python/FastAPI/最小 LLM 服务的概念与表达
