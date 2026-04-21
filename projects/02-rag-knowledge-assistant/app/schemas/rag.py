@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.document import ChunkConfig
 
 
 class Citation(BaseModel):
@@ -25,6 +27,14 @@ class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, description="用户问题")
     top_k: int = Field(default=3, ge=1, le=10, description="返回的检索片段数量")
 
+    @field_validator("question")
+    @classmethod
+    def validate_non_blank_question(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("must not be blank")
+        return normalized
+
 
 class AskResponse(BaseModel):
     answer: str
@@ -42,3 +52,4 @@ class HealthResponse(BaseModel):
     vector_store: str
     retrieval_mode: str
     stored_chunks: int
+    chunk_config: ChunkConfig

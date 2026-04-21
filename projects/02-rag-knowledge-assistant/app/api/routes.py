@@ -1,36 +1,41 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Request
 
-from app.core.config import settings
-from app.schemas.document import DocumentTextRequest, DocumentTextResponse
+from app.schemas.document import DocumentListResponse, DocumentTextRequest, DocumentTextResponse
 from app.schemas.rag import AskRequest, AskResponse, HealthResponse
 from app.services.rag import RAGService
 
 router = APIRouter()
-rag_service = RAGService(settings)
 
 
-def close_services() -> None:
-    rag_service.close()
+def get_rag_service(request: Request) -> RAGService:
+    return request.app.state.rag_service
 
 
 @router.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
+def health(rag_service: RAGService = Depends(get_rag_service)) -> HealthResponse:
     return rag_service.health()
 
 
+@router.get("/documents", response_model=DocumentListResponse)
+def list_documents(
+    rag_service: RAGService = Depends(get_rag_service),
+) -> DocumentListResponse:
+    return rag_service.list_documents()
+
+
 @router.post("/documents/text", response_model=DocumentTextResponse)
-def ingest_text_document(request: DocumentTextRequest) -> DocumentTextResponse:
-    try:
-        return rag_service.ingest_text(request)
-    except Exception as exc:  # pragma: no cover - starter scaffold
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+def ingest_text_document(
+    request: DocumentTextRequest,
+    rag_service: RAGService = Depends(get_rag_service),
+) -> DocumentTextResponse:
+    return rag_service.ingest_text(request)
 
 
 @router.post("/ask", response_model=AskResponse)
-def ask(request: AskRequest) -> AskResponse:
-    try:
-        return rag_service.ask(request)
-    except Exception as exc:  # pragma: no cover - starter scaffold
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+def ask(
+    request: AskRequest,
+    rag_service: RAGService = Depends(get_rag_service),
+) -> AskResponse:
+    return rag_service.ask(request)

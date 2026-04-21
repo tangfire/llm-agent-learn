@@ -13,6 +13,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "RAG Knowledge Assistant")
     app_host: str = os.getenv("APP_HOST", "127.0.0.1")
     app_port: int = int(os.getenv("APP_PORT", "8001"))
+    log_level: str = os.getenv("LOG_LEVEL", "INFO")
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY") or None
     openai_base_url: str | None = os.getenv("OPENAI_BASE_URL") or None
     openai_timeout: float = float(os.getenv("OPENAI_TIMEOUT", "60"))

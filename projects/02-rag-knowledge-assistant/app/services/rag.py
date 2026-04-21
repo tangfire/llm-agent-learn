@@ -1,17 +1,34 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import re
 import uuid
+from datetime import UTC, datetime
 
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 
 from app.core.config import Settings
-from app.schemas.document import ChunkPreview, DocumentTextRequest, DocumentTextResponse
+from app.core.errors import ClientInputError, UpstreamServiceError
+from app.schemas.document import (
+    ChunkConfig,
+    ChunkPreview,
+    DocumentListResponse,
+    DocumentMetadata,
+    DocumentTextRequest,
+    DocumentTextResponse,
+)
 from app.schemas.rag import AskRequest, AskResponse, Citation, HealthResponse, RetrievedChunk
 from app.services.chunker import TextChunker
-from app.services.vector_store import QdrantVectorStore, ScoredChunk, StoredChunk
+from app.services.vector_store import (
+    DocumentSummary,
+    QdrantVectorStore,
+    ScoredChunk,
+    StoredChunk,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class RAGService:
@@ -35,6 +52,13 @@ class RAGService:
                 timeout=settings.openai_timeout,
             )
 
+        logger.info(
+            "RAG service initialized | chat_mode=%s | embedding_mode=%s | qdrant=%s",
+            self._chat_mode(),
+            self._embedding_mode(),
+            self._vector_store.describe(),
+        )
+
     def health(self) -> HealthResponse:
         return HealthResponse(
             status="ok",
@@ -45,6 +69,7 @@ class RAGService:
             vector_store=self._vector_store.describe(),
             retrieval_mode="vector-search",
             stored_chunks=self._vector_store.count_chunks(),
+            chunk_config=self._chunk_config(),
         )
 
     def close(self) -> None:
@@ -52,9 +77,13 @@ class RAGService:
 
     def ingest_text(self, request: DocumentTextRequest) -> DocumentTextResponse:
         document_id = f"doc_{uuid.uuid4().hex[:12]}"
+        ingested_at = self._now_isoformat()
         raw_chunks = self._chunker.split_text(request.text)
         if not raw_chunks:
-            raise ValueError("Document text is empty after trimming.")
+            raise ClientInputError(
+                "Document text is empty after trimming.",
+                error_code="document_text_empty",
+            )
 
         stored_chunks = [
             StoredChunk(
@@ -66,6 +95,7 @@ class RAGService:
                 chunk_index=index,
                 text=chunk_text,
                 char_count=len(chunk_text),
+                ingested_at=ingested_at,
             )
             for index, chunk_text in enumerate(raw_chunks)
         ]
@@ -82,6 +112,12 @@ class RAGService:
             for chunk in stored_chunks[:3]
         ]
 
+        logger.info(
+            "Indexed document | document_id=%s | title=%s | chunk_count=%s",
+            document_id,
+            request.title,
+            len(stored_chunks),
+        )
         return DocumentTextResponse(
             document_id=document_id,
             status="indexed",
@@ -89,11 +125,25 @@ class RAGService:
             source=request.source,
             chunk_count=len(stored_chunks),
             chunk_preview=chunk_preview,
+            chunk_config=self._chunk_config(),
+            ingested_at=ingested_at,
+        )
+
+    def list_documents(self) -> DocumentListResponse:
+        summaries = self._vector_store.list_documents()
+        documents = [self._to_document_metadata(item) for item in summaries]
+        logger.info("Listed indexed documents | total=%s", len(documents))
+        return DocumentListResponse(
+            total_documents=len(documents),
+            chunk_config=self._chunk_config(),
+            documents=documents,
         )
 
     def ask(self, request: AskRequest) -> AskResponse:
         query_vector = self._embed_text(request.question)
-        candidate_limit = request.top_k if self._client is not None else max(request.top_k * 4, 8)
+        candidate_limit = (
+            request.top_k if self._client is not None else max(request.top_k * 4, 8)
+        )
         retrieved = self._vector_store.retrieve(
             query_vector=query_vector,
             limit=candidate_limit,
@@ -129,7 +179,12 @@ class RAGService:
 
         answer = self._build_answer(request.question, retrieved_chunks)
         mode = "live-rag" if self._client is not None else "local-rag"
-
+        logger.info(
+            "Answered question | top_k=%s | hits=%s | mode=%s",
+            request.top_k,
+            len(retrieved_chunks),
+            mode,
+        )
         return AskResponse(
             answer=answer,
             citations=citations,
@@ -144,11 +199,18 @@ class RAGService:
         if self._client is None:
             return [self._local_embedding(text) for text in texts]
 
-        response = self._client.embeddings.create(
-            model=self._settings.embedding_model,
-            input=texts,
-            dimensions=self._settings.embedding_dimension,
-        )
+        try:
+            response = self._client.embeddings.create(
+                model=self._settings.embedding_model,
+                input=texts,
+                dimensions=self._settings.embedding_dimension,
+            )
+        except OpenAIError as exc:
+            raise UpstreamServiceError(
+                "Embedding request to OpenAI failed.",
+                error_code="embedding_request_failed",
+            ) from exc
+
         sorted_data = sorted(response.data, key=lambda item: item.index)
         return [list(item.embedding) for item in sorted_data]
 
@@ -176,37 +238,43 @@ class RAGService:
             for index, item in enumerate(retrieved_chunks, start=1)
         )
 
-        response = self._client.responses.create(
-            model=self._settings.chat_model,
-            input=[
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": (
-                                "你是一个知识库问答助手。"
-                                "只能基于给定检索内容回答，不能编造。"
-                                "如果检索内容不足以回答，就明确说不知道。"
-                                "回答尽量简洁。"
-                            ),
-                        }
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": (
-                                f"问题：{question}\n\n"
-                                f"请基于以下检索内容作答：\n{context}"
-                            ),
-                        }
-                    ],
-                },
-            ],
-        )
+        try:
+            response = self._client.responses.create(
+                model=self._settings.chat_model,
+                input=[
+                    {
+                        "role": "system",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": (
+                                    "你是一个知识库问答助手。"
+                                    "只能基于给定检索内容回答，不能编造。"
+                                    "如果检索内容不足以回答，就明确说不知道。"
+                                    "回答尽量简洁。"
+                                ),
+                            }
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": (
+                                    f"问题：{question}\n\n"
+                                    f"请基于以下检索内容作答：\n{context}"
+                                ),
+                            }
+                        ],
+                    },
+                ],
+            )
+        except OpenAIError as exc:
+            raise UpstreamServiceError(
+                "Answer generation request to OpenAI failed.",
+                error_code="answer_generation_failed",
+            ) from exc
         return self._extract_text(response)
 
     def _local_embedding(self, text: str) -> list[float]:
@@ -282,6 +350,23 @@ class RAGService:
         stripped = text.strip().lower()
         return [stripped] if stripped else []
 
+    def _chunk_config(self) -> ChunkConfig:
+        return ChunkConfig(
+            chunk_size=self._settings.chunk_size,
+            chunk_overlap=self._settings.chunk_overlap,
+        )
+
+    def _to_document_metadata(self, summary: DocumentSummary) -> DocumentMetadata:
+        return DocumentMetadata(
+            document_id=summary.document_id,
+            title=summary.title,
+            source=summary.source,
+            tags=summary.tags,
+            chunk_count=summary.chunk_count,
+            total_char_count=summary.total_char_count,
+            ingested_at=summary.ingested_at,
+        )
+
     def _embedding_mode(self) -> str:
         return "openai-embedding" if self._client is not None else "local-hash-embedding"
 
@@ -301,3 +386,6 @@ class RAGService:
                     parts.append(text)
 
         return "".join(parts).strip()
+
+    def _now_isoformat(self) -> str:
+        return datetime.now(tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
