@@ -1,0 +1,52 @@
+[
+  {
+    "question": "Redis 常见应用场景有哪些？",
+    "expected_title": "Redis Notes",
+    "note": "验证缓存、队列、排行榜等基础知识检索。"
+  },
+  {
+    "question": "为什么 Redis 适合做登录态和短期缓存？",
+    "expected_title": "Redis Notes",
+    "note": "验证 TTL 相关内容能否被召回。"
+  },
+  {
+    "question": "FastAPI 为什么适合构建 AI 应用接口？",
+    "expected_title": "FastAPI Notes",
+    "note": "验证 schema、异步和文档自动生成的描述。"
+  },
+  {
+    "question": "FastAPI 会自动生成什么文档？",
+    "expected_title": "FastAPI Notes",
+    "note": "验证 OpenAPI 相关知识。"
+  },
+  {
+    "question": "PostgreSQL 的 MVCC 在解决什么问题？",
+    "expected_title": "PostgreSQL Notes",
+    "note": "验证数据库并发读写相关概念。"
+  },
+  {
+    "question": "PostgreSQL 复制通常用来做什么？",
+    "expected_title": "PostgreSQL Notes",
+    "note": "验证主从同步和只读副本相关内容。"
+  },
+  {
+    "question": "Qdrant 在 RAG 里主要负责哪一段？",
+    "expected_title": "Qdrant Notes",
+    "note": "验证向量检索和召回阶段知识。"
+  },
+  {
+    "question": "Qdrant 除了向量检索还支持什么过滤能力？",
+    "expected_title": "Qdrant Notes",
+    "note": "验证 metadata filtering 的召回。"
+  },
+  {
+    "question": "为什么 RAG 里要加 citations 和低相关度拒答？",
+    "expected_title": "RAG Notes",
+    "note": "验证 RAG 可靠性相关设计。"
+  },
+  {
+    "question": "怎么烤一个戚风蛋糕？",
+    "expected_status": "low_confidence",
+    "note": "验证无关问题是否会被低相关度拒答。"
+  }
+]

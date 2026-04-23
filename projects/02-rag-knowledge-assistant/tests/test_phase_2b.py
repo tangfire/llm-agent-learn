@@ -30,6 +30,8 @@ class Phase2BTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.client_cm.__exit__(None, None, None)
+        del self.client
+        del self.app
         self.temp_dir.cleanup()
 
     def test_health_exposes_chunk_config(self) -> None:
@@ -39,6 +41,13 @@ class Phase2BTestCase(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["chunk_config"], {"chunk_size": 120, "chunk_overlap": 20})
+        self.assertEqual(
+            payload["retrieval_config"],
+            {
+                "low_confidence_score_threshold": 0.25,
+                "rerank_enabled": True,
+            },
+        )
 
     def test_documents_endpoint_lists_aggregated_metadata(self) -> None:
         ingest_response = self.client.post(

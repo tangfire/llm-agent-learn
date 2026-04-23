@@ -14,14 +14,19 @@
 - `GET /documents` 文档元信息列表
 - chunk 参数配置化与接口展示
 - 基础日志、错误分类、lifespan 初始化
+- 低相关度拒答
+- `status + debug` 检索调试信息
+- `8-10` 条测试问题、golden set、可复现本地 eval
 
 ## 当前说明
 
-今天这版已经从“能跑的 RAG V1”推进到了“Phase 2B 工程化版”。
+今天这版已经从“能跑的 RAG V1”推进到了“Phase 2C 可靠版”。
 
 - `POST /documents/text`：接收文本，切分 chunk，生成 embedding，并写入本地 qdrant
 - `GET /documents`：聚合已入库文档的元信息，返回文档数、标签、chunk 数、字符数、入库时间
 - `POST /ask`：对问题生成 query embedding，做向量检索，再返回 `answer`、`citations`、`retrieved_chunks`
+- `/ask` 增加 `status`，并支持通过 `return_debug=true` 返回检索调试信息
+- 当 top1 score 低于阈值时会触发低相关度拒答，不再强行回答
 - `/health` 和 `/documents/text` 会展示当前生效的 `chunk_size` / `chunk_overlap`
 - 启动改成 `lifespan + app factory`，避免 import 时过早初始化本地 qdrant
 - 加了基础请求日志与更清晰的错误分类，便于排障和测试
@@ -88,6 +93,69 @@ POST /ask
 - 本地开发和测试更稳定
 - 失败时更容易知道是“我参数错了”“向量库坏了”还是“模型调用失败了”
 
+## Phase 2C 这次补了什么
+
+### 1. 低相关度拒答
+
+现在 `/ask` 不会再默认“检到一点东西就回答”，而是会先看最相关 chunk 的 score。
+
+- 当前默认阈值是 `LOW_CONFIDENCE_SCORE_THRESHOLD=0.25`
+- 如果 top1 score 低于阈值，就返回 `status=low_confidence`
+- 这时 `citations` 会清空，避免把不靠谱的命中结果包装成“有依据的答案”
+
+这一步的价值是：
+
+- 避免模型基于噪声上下文硬编答案
+- 让系统从“像是会答”变成“知道什么时候不该答”
+
+### 2. `status + debug` 调试信息
+
+`/ask` 现在多了一层显式决策信息：
+
+- `status=answered`：正常回答
+- `status=no_hit`：知识库里没有命中内容
+- `status=low_confidence`：有召回，但相关度不够高
+
+如果请求里带上 `return_debug=true`，还会返回：
+
+- `requested_top_k`
+- `candidate_limit`
+- `best_score`
+- `low_confidence_score_threshold`
+- `decision`
+- `rejection_reason`
+
+这一步的价值是：
+
+- 你可以更快判断是 `top_k`、阈值还是文档质量出了问题
+- 后面做阈值调优、rerank 对比、失败 case 复盘时更方便
+
+### 3. 测试问题、golden set 和本地 eval
+
+现在仓库里已经有一套可复现的最小评测资产：
+
+- `eval/fixtures/sample_documents.json`
+- `eval/test_questions.json`
+- `eval/golden_set.json`
+- `scripts/run_local_eval.py`
+- `eval/results/local_eval_baseline.json`
+
+这一步的价值是：
+
+- 不再只靠“我感觉效果还行”
+- 你可以在改 chunk、阈值、rerank 后快速回归
+- 这已经开始接近真正工程项目里的最小 eval 闭环
+
+### 4. 一次真实的阈值调优记录
+
+这版不是拍脑袋把拒答阈值写死，而是做过一轮很小但真实的调优。
+
+- 之前阈值设为 `0.30` 时，问题“Redis 常见应用场景有哪些？”会被误拒，`best_score=0.2778`
+- 调到 `0.25` 之后，这个 Redis 问题能正常回答
+- 同时无关问题“怎么烤一个戚风蛋糕？”的 `best_score=0.2193`，依然会被拒答
+
+这说明阈值调优不是越高越好，而是要在“减少误答”和“减少误拒”之间找平衡。
+
 ## 当前接口
 
 - `GET /health`
@@ -104,6 +172,8 @@ POST /ask
 - `app/services/chunker.py`：chunk 切分策略
 - `app/core/config.py`：配置管理
 - `app/core/errors.py`：统一错误分类与响应
+- `eval/`：样例知识库、测试问题、golden set、baseline 结果
+- `scripts/run_local_eval.py`：本地可复现评测脚本
 
 ## 架构说明
 
@@ -245,6 +315,7 @@ uvicorn app.main:app --reload --port 8001
 - `LOG_LEVEL`：日志级别，默认 `INFO`
 - `CHUNK_SIZE`：chunk 大小
 - `CHUNK_OVERLAP`：chunk 重叠长度
+- `LOW_CONFIDENCE_SCORE_THRESHOLD`：低相关度拒答阈值，默认 `0.25`
 
 ## 错误分类
 
@@ -270,7 +341,8 @@ uvicorn app.main:app --reload --port 8001
 
 - 服务实例不再在 import 阶段创建，而是在 app 启动时创建
 - `create_app(settings)` 可以在测试里传入临时 `qdrant_path`
-- 已补一组最小接口测试，覆盖 `/health`、`/documents`、空白问题校验
+- 已补一组最小接口测试，覆盖 `/health`、`/documents`、空白问题校验、低相关度拒答
+- 已补本地 eval 脚本，可以把 fixture 文档和 golden set 跑成基线结果
 
 运行测试：
 
@@ -279,6 +351,20 @@ cd /Users/firetang/Documents/llm/projects/02-rag-knowledge-assistant
 source .venv/bin/activate
 python -m unittest discover -s tests -v
 ```
+
+运行本地 eval：
+
+```bash
+cd /Users/firetang/Documents/llm/projects/02-rag-knowledge-assistant
+source .venv/bin/activate
+python scripts/run_local_eval.py --output eval/results/local_eval_baseline.json
+```
+
+当前 baseline：
+
+- `10` 条测试问题
+- `6` 条 golden set
+- 本地 baseline 结果：`6/6` 通过
 
 ## Curl
 
@@ -305,6 +391,7 @@ curl -X POST http://127.0.0.1:8001/ask \
   -H "Content-Type: application/json" \
   -d '{
     "question": "Redis 常见应用场景有哪些？",
-    "top_k": 3
+    "top_k": 3,
+    "return_debug": true
   }'
 ```

@@ -1,0 +1,38 @@
+[
+  {
+    "question": "Redis 常见应用场景有哪些？",
+    "expected_status": "answered",
+    "expected_titles": ["Redis Notes"],
+    "note": "缓存、队列、排行榜、分布式锁。"
+  },
+  {
+    "question": "FastAPI 会自动生成什么文档？",
+    "expected_status": "answered",
+    "expected_titles": ["FastAPI Notes"],
+    "note": "OpenAPI 文档。"
+  },
+  {
+    "question": "PostgreSQL 的 MVCC 在解决什么问题？",
+    "expected_status": "answered",
+    "expected_titles": ["PostgreSQL Notes"],
+    "note": "高并发下减少锁冲突。"
+  },
+  {
+    "question": "Qdrant 在 RAG 里主要负责哪一段？",
+    "expected_status": "answered",
+    "expected_titles": ["Qdrant Notes"],
+    "note": "向量检索与召回。"
+  },
+  {
+    "question": "为什么 RAG 里要加 citations 和低相关度拒答？",
+    "expected_status": "answered",
+    "expected_titles": ["RAG Notes"],
+    "note": "验证可验证性与拒答设计。"
+  },
+  {
+    "question": "怎么烤一个戚风蛋糕？",
+    "expected_status": "low_confidence",
+    "expected_titles": [],
+    "note": "无关问题应该拒答。"
+  }
+]

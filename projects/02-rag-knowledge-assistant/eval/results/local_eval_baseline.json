@@ -1,0 +1,170 @@
+{
+  "question_results": [
+    {
+      "question": "Redis 常见应用场景有哪些？",
+      "status": "answered",
+      "top_title": "Redis Notes",
+      "best_score": 0.2778,
+      "note": "验证缓存、队列、排行榜等基础知识检索。"
+    },
+    {
+      "question": "为什么 Redis 适合做登录态和短期缓存？",
+      "status": "answered",
+      "top_title": "Redis Notes",
+      "best_score": 0.6271,
+      "note": "验证 TTL 相关内容能否被召回。"
+    },
+    {
+      "question": "FastAPI 为什么适合构建 AI 应用接口？",
+      "status": "answered",
+      "top_title": "FastAPI Notes",
+      "best_score": 0.6822,
+      "note": "验证 schema、异步和文档自动生成的描述。"
+    },
+    {
+      "question": "FastAPI 会自动生成什么文档？",
+      "status": "answered",
+      "top_title": "FastAPI Notes",
+      "best_score": 0.5115,
+      "note": "验证 OpenAPI 相关知识。"
+    },
+    {
+      "question": "PostgreSQL 的 MVCC 在解决什么问题？",
+      "status": "answered",
+      "top_title": "PostgreSQL Notes",
+      "best_score": 0.3863,
+      "note": "验证数据库并发读写相关概念。"
+    },
+    {
+      "question": "PostgreSQL 复制通常用来做什么？",
+      "status": "answered",
+      "top_title": "PostgreSQL Notes",
+      "best_score": 0.5754,
+      "note": "验证主从同步和只读副本相关内容。"
+    },
+    {
+      "question": "Qdrant 在 RAG 里主要负责哪一段？",
+      "status": "answered",
+      "top_title": "Qdrant Notes",
+      "best_score": 0.3575,
+      "note": "验证向量检索和召回阶段知识。"
+    },
+    {
+      "question": "Qdrant 除了向量检索还支持什么过滤能力？",
+      "status": "answered",
+      "top_title": "Qdrant Notes",
+      "best_score": 0.5731,
+      "note": "验证 metadata filtering 的召回。"
+    },
+    {
+      "question": "为什么 RAG 里要加 citations 和低相关度拒答？",
+      "status": "answered",
+      "top_title": "RAG Notes",
+      "best_score": 0.6298,
+      "note": "验证 RAG 可靠性相关设计。"
+    },
+    {
+      "question": "怎么烤一个戚风蛋糕？",
+      "status": "low_confidence",
+      "top_title": null,
+      "best_score": 0.2193,
+      "note": "验证无关问题是否会被低相关度拒答。"
+    }
+  ],
+  "golden_results": [
+    {
+      "question": "Redis 常见应用场景有哪些？",
+      "expected_status": "answered",
+      "observed_status": "answered",
+      "expected_titles": [
+        "Redis Notes"
+      ],
+      "observed_titles": [
+        "Redis Notes",
+        "PostgreSQL Notes",
+        "FastAPI Notes"
+      ],
+      "best_score": 0.2778,
+      "passed": true,
+      "note": "缓存、队列、排行榜、分布式锁。"
+    },
+    {
+      "question": "FastAPI 会自动生成什么文档？",
+      "expected_status": "answered",
+      "observed_status": "answered",
+      "expected_titles": [
+        "FastAPI Notes"
+      ],
+      "observed_titles": [
+        "FastAPI Notes",
+        "RAG Notes",
+        "Qdrant Notes"
+      ],
+      "best_score": 0.5115,
+      "passed": true,
+      "note": "OpenAPI 文档。"
+    },
+    {
+      "question": "PostgreSQL 的 MVCC 在解决什么问题？",
+      "expected_status": "answered",
+      "observed_status": "answered",
+      "expected_titles": [
+        "PostgreSQL Notes"
+      ],
+      "observed_titles": [
+        "PostgreSQL Notes",
+        "Redis Notes",
+        "Qdrant Notes"
+      ],
+      "best_score": 0.3863,
+      "passed": true,
+      "note": "高并发下减少锁冲突。"
+    },
+    {
+      "question": "Qdrant 在 RAG 里主要负责哪一段？",
+      "expected_status": "answered",
+      "observed_status": "answered",
+      "expected_titles": [
+        "Qdrant Notes"
+      ],
+      "observed_titles": [
+        "Qdrant Notes",
+        "RAG Notes",
+        "FastAPI Notes"
+      ],
+      "best_score": 0.3575,
+      "passed": true,
+      "note": "向量检索与召回。"
+    },
+    {
+      "question": "为什么 RAG 里要加 citations 和低相关度拒答？",
+      "expected_status": "answered",
+      "observed_status": "answered",
+      "expected_titles": [
+        "RAG Notes"
+      ],
+      "observed_titles": [
+        "RAG Notes",
+        "Qdrant Notes",
+        "PostgreSQL Notes"
+      ],
+      "best_score": 0.6298,
+      "passed": true,
+      "note": "验证可验证性与拒答设计。"
+    },
+    {
+      "question": "怎么烤一个戚风蛋糕？",
+      "expected_status": "low_confidence",
+      "observed_status": "low_confidence",
+      "expected_titles": [],
+      "observed_titles": [],
+      "best_score": 0.2193,
+      "passed": true,
+      "note": "无关问题应该拒答。"
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "total": 6
+  }
+}

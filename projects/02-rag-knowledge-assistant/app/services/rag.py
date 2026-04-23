@@ -19,7 +19,15 @@ from app.schemas.document import (
     DocumentTextRequest,
     DocumentTextResponse,
 )
-from app.schemas.rag import AskRequest, AskResponse, Citation, HealthResponse, RetrievedChunk
+from app.schemas.rag import (
+    AskRequest,
+    AskResponse,
+    Citation,
+    HealthResponse,
+    RetrievalConfig,
+    RetrievalDebug,
+    RetrievedChunk,
+)
 from app.services.chunker import TextChunker
 from app.services.vector_store import (
     DocumentSummary,
@@ -70,6 +78,7 @@ class RAGService:
             retrieval_mode="vector-search",
             stored_chunks=self._vector_store.count_chunks(),
             chunk_config=self._chunk_config(),
+            retrieval_config=self._retrieval_config(),
         )
 
     def close(self) -> None:
@@ -148,7 +157,8 @@ class RAGService:
             query_vector=query_vector,
             limit=candidate_limit,
         )
-        if self._client is None:
+        rerank_applied = self._client is None
+        if rerank_applied:
             retrieved = self._rerank_locally(request.question, retrieved, request.top_k)
         else:
             retrieved = retrieved[: request.top_k]
@@ -177,19 +187,37 @@ class RAGService:
             for item in retrieved
         ]
 
-        answer = self._build_answer(request.question, retrieved_chunks)
+        decision, rejection_reason = self._evaluate_retrieval(retrieved_chunks)
+        if decision == "answered":
+            answer = self._build_answer(request.question, retrieved_chunks)
+        else:
+            answer = self._build_rejection_answer(decision)
+
         mode = "live-rag" if self._client is not None else "local-rag"
+        debug = RetrievalDebug(
+            requested_top_k=request.top_k,
+            candidate_limit=candidate_limit,
+            rerank_applied=rerank_applied,
+            low_confidence_score_threshold=self._settings.low_confidence_score_threshold,
+            retrieved_count=len(retrieved_chunks),
+            best_score=retrieved_chunks[0].score if retrieved_chunks else None,
+            decision=decision,
+            rejection_reason=rejection_reason,
+        )
         logger.info(
-            "Answered question | top_k=%s | hits=%s | mode=%s",
+            "Handled question | top_k=%s | hits=%s | mode=%s | decision=%s",
             request.top_k,
             len(retrieved_chunks),
             mode,
+            decision,
         )
         return AskResponse(
+            status=decision,
             answer=answer,
-            citations=citations,
+            citations=citations if decision == "answered" else [],
             retrieved_chunks=retrieved_chunks,
             mode=mode,
+            debug=debug if request.return_debug or decision != "answered" else None,
         )
 
     def _embed_text(self, text: str) -> list[float]:
@@ -389,3 +417,30 @@ class RAGService:
 
     def _now_isoformat(self) -> str:
         return datetime.now(tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    def _retrieval_config(self) -> RetrievalConfig:
+        return RetrievalConfig(
+            low_confidence_score_threshold=self._settings.low_confidence_score_threshold,
+            rerank_enabled=self._client is None,
+        )
+
+    def _evaluate_retrieval(
+        self, retrieved_chunks: list[RetrievedChunk]
+    ) -> tuple[str, str | None]:
+        if not retrieved_chunks:
+            if self._vector_store.count_chunks() == 0:
+                return "no_hit", "knowledge_base_is_empty"
+            return "no_hit", "no_chunks_retrieved"
+
+        best_score = retrieved_chunks[0].score
+        if best_score < self._settings.low_confidence_score_threshold:
+            return "low_confidence", "best_score_below_threshold"
+        return "answered", None
+
+    def _build_rejection_answer(self, decision: str) -> str:
+        if decision == "no_hit":
+            return "我没有在知识库里检索到可用内容。你可以先导入文档，或者换一种问法再试。"
+        return (
+            "我检索到了一些片段，但相关度不够高，当前不适合直接给结论。"
+            "你可以换一种更具体的问法，或先补充更相关的文档。"
+        )

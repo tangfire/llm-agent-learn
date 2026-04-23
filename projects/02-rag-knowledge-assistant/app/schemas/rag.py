@@ -23,9 +23,26 @@ class RetrievedChunk(BaseModel):
     score: float
 
 
+class RetrievalConfig(BaseModel):
+    low_confidence_score_threshold: float
+    rerank_enabled: bool
+
+
+class RetrievalDebug(BaseModel):
+    requested_top_k: int
+    candidate_limit: int
+    rerank_applied: bool
+    low_confidence_score_threshold: float
+    retrieved_count: int
+    best_score: float | None = None
+    decision: str
+    rejection_reason: str | None = None
+
+
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, description="用户问题")
     top_k: int = Field(default=3, ge=1, le=10, description="返回的检索片段数量")
+    return_debug: bool = Field(default=False, description="是否返回检索调试信息")
 
     @field_validator("question")
     @classmethod
@@ -37,10 +54,12 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
+    status: str
     answer: str
     citations: list[Citation] = Field(default_factory=list)
     retrieved_chunks: list[RetrievedChunk] = Field(default_factory=list)
     mode: str
+    debug: RetrievalDebug | None = None
 
 
 class HealthResponse(BaseModel):
@@ -53,3 +72,4 @@ class HealthResponse(BaseModel):
     retrieval_mode: str
     stored_chunks: int
     chunk_config: ChunkConfig
+    retrieval_config: RetrievalConfig

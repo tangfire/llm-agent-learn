@@ -26,6 +26,9 @@ class Settings:
     )
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "500"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "100"))
+    low_confidence_score_threshold: float = float(
+        os.getenv("LOW_CONFIDENCE_SCORE_THRESHOLD", "0.25")
+    )
 
 
 settings = Settings()

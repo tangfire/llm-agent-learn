@@ -1,0 +1,32 @@
+[
+  {
+    "title": "Redis Notes",
+    "source": "redis-notes.md",
+    "tags": ["cache", "queue", "backend"],
+    "text": "Redis 是一个基于内存的数据结构存储系统，常用于缓存、消息队列、排行榜、会话状态和分布式锁。它支持 TTL 过期时间，所以很适合做短期缓存和登录态管理。把热点数据放进 Redis 可以降低数据库压力，但也要考虑缓存一致性和穿透问题。"
+  },
+  {
+    "title": "FastAPI Notes",
+    "source": "fastapi-notes.md",
+    "tags": ["python", "api", "framework"],
+    "text": "FastAPI 是一个面向 Python 的现代 Web 框架，强调类型标注、异步处理和自动生成 OpenAPI 文档。它很适合构建 AI 应用接口，因为请求模型、响应模型和参数校验都比较清晰。使用 Pydantic 可以把输入输出 schema 管理得更稳定。"
+  },
+  {
+    "title": "PostgreSQL Notes",
+    "source": "postgres-notes.md",
+    "tags": ["database", "sql", "backend"],
+    "text": "PostgreSQL 是一个关系型数据库，支持事务、索引、MVCC 和复杂查询。MVCC 可以帮助系统在高并发读写场景下减少锁冲突。复制通常用于主从同步、只读副本和容灾，但复制不能替代真正的备份策略。"
+  },
+  {
+    "title": "Qdrant Notes",
+    "source": "qdrant-notes.md",
+    "tags": ["rag", "vector-db", "retrieval"],
+    "text": "Qdrant 是一个向量数据库，适合存储 embedding 后的向量并做相似度检索。它常用于 RAG 系统的召回阶段，可以根据 query 向量找到最相关的文档片段。除了向量检索，Qdrant 还支持 payload 和 metadata filtering。"
+  },
+  {
+    "title": "RAG Notes",
+    "source": "rag-notes.md",
+    "tags": ["rag", "llm", "retrieval"],
+    "text": "RAG 的基本流程通常是文档切分、embedding、向量检索、必要时 rerank，然后把命中的 chunk 交给模型生成答案。citations 的价值在于可验证性，低相关度拒答的价值在于避免模型基于噪声上下文强行作答。"
+  }
+]

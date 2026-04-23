@@ -141,7 +141,7 @@
 - [x] 有架构说明
 - [x] 有关键模块拆分
 - [x] 有日志 / 错误处理 / 配置项
-- [ ] 有评测问题集或验证方法
+- [x] 有评测问题集或验证方法
 - [x] 有 tradeoff 说明
 - [ ] 有简历 bullets
 
@@ -322,11 +322,11 @@
 #### Phase 2C: 补齐 RAG 可靠性
 
 - [x] 增加空白输入校验
-- [ ] 增加低相关度拒答
+- [x] 增加低相关度拒答
 - [x] 增加最小化 rerank
-- [ ] 增加 top_k 与 score 的调试信息
-- [ ] 增加至少 8-10 条测试问题
-- [ ] 建立一小份 golden set
+- [x] 增加 top_k 与 score 的调试信息
+- [x] 增加至少 8-10 条测试问题
+- [x] 建立一小份 golden set
 
 #### Phase 2D: 做成简历级项目
 
@@ -334,7 +334,7 @@
 - [x] 写清楚为什么先做 RAG 而不是微调
 - [x] 写清楚 chunk 的取值权衡
 - [x] 写清楚 citations 的价值
-- [ ] 写清楚优化前后变化
+- [x] 写清楚优化前后变化
 - [ ] 输出 2-3 条简历 bullets
 
 #### Phase 2E: 站上竞争力档位
@@ -343,8 +343,16 @@
 - [ ] 尝试 hybrid retrieval 或至少给出设计方案
 - [ ] 增加文档版本意识或更新策略说明
 - [ ] 增加失败 case 记录
-- [ ] 输出一份小型 eval / benchmark 结果
+- [x] 输出一份小型 eval / benchmark 结果
 - [ ] 写出项目中的系统瓶颈和后续优化方向
+
+#### Phase 2F: 从 demo 走向更像真实系统
+
+- [ ] 为 ingest 增加去重 / replace 策略，避免重复入库污染检索
+- [ ] 为 `/ask` 增加 tags / document_ids 过滤，缩小检索范围
+- [ ] 固化阈值调优记录，说明为什么 `0.25` 比 `0.30` 更合适
+- [ ] 增加 query trace 导出，便于复盘 `top_k / threshold / score / decision`
+- [ ] 建立至少 3 个失败 case，并持续做回归验证
 
 #### Must Understand
 
@@ -783,15 +791,26 @@
 ### This Sprint Checklist
 
 - [x] 为 `AskRequest` 增加空白输入校验
-- [ ] 为检索结果增加低相关度拒答逻辑
+- [x] 为检索结果增加低相关度拒答逻辑
 - [x] 为 `/documents/text` 区分客户端错误和服务端错误
 - [x] 解决本地 `qdrant` 初始化过早导致的并发占用问题
 - [x] 增加 `GET /documents`
 - [x] 增加基础日志
 - [x] 为 `/health` 与文档入库响应增加 chunk 配置展示
 - [x] 为 `02` 增加最小接口测试
-- [ ] 增加 8-10 条测试问题
-- [ ] 记录一次优化前后的效果差异
+- [x] 增加 8-10 条测试问题
+- [x] 记录一次优化前后的效果差异
+- [x] 为 `/ask` 增加 `status + debug` 调试信息
+- [x] 增加本地 golden set 与可复现 eval 脚本
+- [x] 产出一份 baseline eval 结果文件
+
+### Next Hardening Checklist
+
+- [ ] 增加 tags / document_ids 过滤，把检索范围收窄到指定文档
+- [ ] 增加重复导入去重或 replace 机制
+- [ ] 记录 3 个以上失败 case，并把它们加入回归集
+- [ ] 输出 2-3 条简历 bullets
+- [ ] 写一版系统瓶颈与后续优化方向说明
 
 ## 竞争力检查点
 
