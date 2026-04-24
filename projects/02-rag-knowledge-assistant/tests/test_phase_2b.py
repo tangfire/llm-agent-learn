@@ -18,6 +18,7 @@ class Phase2BTestCase(unittest.TestCase):
             Settings(
                 app_name="RAG Knowledge Assistant Test",
                 qdrant_path=qdrant_path,
+                query_trace_path=os.path.join(self.temp_dir.name, "query_traces.jsonl"),
                 chunk_size=120,
                 chunk_overlap=20,
                 log_level="INFO",

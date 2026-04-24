@@ -18,6 +18,7 @@ class Phase2CTestCase(unittest.TestCase):
             Settings(
                 app_name="RAG Knowledge Assistant Phase 2C Test",
                 qdrant_path=qdrant_path,
+                query_trace_path=os.path.join(self.temp_dir.name, "query_traces.jsonl"),
                 chunk_size=180,
                 chunk_overlap=30,
                 log_level="INFO",
@@ -102,6 +103,31 @@ class Phase2CTestCase(unittest.TestCase):
             payload["debug"]["low_confidence_score_threshold"],
             0.25,
         )
+        self.assertTrue(payload["debug"]["trace_id"])
+
+    def test_recent_traces_endpoint_returns_latest_decision(self) -> None:
+        self._ingest_redis_document()
+
+        ask_response = self.client.post(
+            "/ask",
+            json={
+                "question": "Redis 常见应用场景有哪些？",
+                "top_k": 2,
+                "return_debug": True,
+            },
+        )
+        self.assertEqual(ask_response.status_code, 200)
+        trace_id = ask_response.json()["debug"]["trace_id"]
+
+        traces_response = self.client.get("/traces", params={"limit": 1})
+
+        self.assertEqual(traces_response.status_code, 200)
+        payload = traces_response.json()
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["traces"][0]["trace_id"], trace_id)
+        self.assertEqual(payload["traces"][0]["status"], "answered")
+        self.assertEqual(payload["traces"][0]["question"], "Redis 常见应用场景有哪些？")
+        self.assertEqual(payload["traces"][0]["citations"][0]["title"], "Redis Notes")
 
     def _ingest_redis_document(self) -> None:
         response = self.client.post(

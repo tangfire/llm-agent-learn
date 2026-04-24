@@ -163,8 +163,39 @@
       "note": "无关问题应该拒答。"
     }
   ],
+  "failure_results": [
+    {
+      "name": "irrelevant_question_low_confidence",
+      "question": "怎么烤一个戚风蛋糕？",
+      "expected_status": "low_confidence",
+      "observed_status": "low_confidence",
+      "expected_reason": "best_score_below_threshold",
+      "observed_reason": "best_score_below_threshold",
+      "passed": true
+    },
+    {
+      "name": "wrong_tag_filter_no_hit",
+      "question": "Redis 常见应用场景有哪些？",
+      "expected_status": "no_hit",
+      "observed_status": "no_hit",
+      "expected_reason": "no_chunks_after_filter",
+      "observed_reason": "no_chunks_after_filter",
+      "passed": true
+    },
+    {
+      "name": "wrong_document_scope_no_hit",
+      "question": "Redis 常见应用场景有哪些？",
+      "expected_status": "no_hit",
+      "observed_status": "no_hit",
+      "expected_reason": "no_chunks_after_filter",
+      "observed_reason": "no_chunks_after_filter",
+      "passed": true
+    }
+  ],
   "summary": {
     "passed": 6,
-    "total": 6
+    "total": 6,
+    "failure_passed": 3,
+    "failure_total": 3
   }
 }

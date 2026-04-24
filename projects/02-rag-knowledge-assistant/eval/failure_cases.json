@@ -1,0 +1,22 @@
+[
+  {
+    "name": "irrelevant_question_low_confidence",
+    "question": "怎么烤一个戚风蛋糕？",
+    "expected_status": "low_confidence",
+    "expected_reason": "best_score_below_threshold"
+  },
+  {
+    "name": "wrong_tag_filter_no_hit",
+    "question": "Redis 常见应用场景有哪些？",
+    "tags": ["missing-scope"],
+    "expected_status": "no_hit",
+    "expected_reason": "no_chunks_after_filter"
+  },
+  {
+    "name": "wrong_document_scope_no_hit",
+    "question": "Redis 常见应用场景有哪些？",
+    "document_ids": ["doc_missing_scope"],
+    "expected_status": "no_hit",
+    "expected_reason": "no_chunks_after_filter"
+  }
+]

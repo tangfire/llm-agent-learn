@@ -19,10 +19,12 @@ class StoredChunk:
     document_id: str
     title: str
     source: str | None
+    source_type: str
     tags: list[str]
     chunk_index: int
     text: str
     char_count: int
+    content_sha256: str
     ingested_at: str | None = None
 
 
@@ -37,9 +39,11 @@ class DocumentSummary:
     document_id: str
     title: str
     source: str | None
+    source_type: str
     tags: list[str]
     chunk_count: int
     total_char_count: int
+    content_sha256: str | None
     ingested_at: str | None
 
 
@@ -74,11 +78,20 @@ class QdrantVectorStore:
                 error_code="vector_store_upsert_failed",
             ) from exc
 
-    def retrieve(self, query_vector: list[float], limit: int) -> list[ScoredChunk]:
+    def retrieve(
+        self,
+        query_vector: list[float],
+        limit: int,
+        *,
+        document_ids: list[str] | None = None,
+        tags: list[str] | None = None,
+    ) -> list[ScoredChunk]:
+        query_filter = self._build_query_filter(document_ids=document_ids, tags=tags)
         try:
             response = self._client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
+                query_filter=query_filter,
                 limit=limit,
                 with_payload=True,
                 with_vectors=False,
@@ -98,6 +111,70 @@ class QdrantVectorStore:
         ]
 
     def list_documents(self) -> list[DocumentSummary]:
+        return self._list_documents()
+
+    def find_documents(
+        self,
+        *,
+        source: str | None = None,
+        content_sha256: str | None = None,
+    ) -> list[DocumentSummary]:
+        query_filter = self._build_query_filter(
+            source=source,
+            content_sha256=content_sha256,
+        )
+        return self._list_documents(query_filter=query_filter)
+
+    def delete_documents(self, document_ids: list[str]) -> int:
+        normalized_document_ids = sorted({item for item in document_ids if item})
+        if not normalized_document_ids:
+            return 0
+
+        try:
+            points_selector = models.FilterSelector(
+                filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="document_id",
+                            match=models.MatchAny(any=normalized_document_ids),
+                        )
+                    ]
+                )
+            )
+            self._client.delete(
+                collection_name=self.collection_name,
+                points_selector=points_selector,
+                wait=True,
+            )
+        except Exception as exc:
+            raise StorageError(
+                "Failed to delete existing document chunks from qdrant.",
+                error_code="vector_store_delete_failed",
+            ) from exc
+
+        return len(normalized_document_ids)
+
+    def describe(self) -> str:
+        return f"qdrant-local:{self.collection_name}:{self.vector_size}d"
+
+    def count_chunks(self) -> int:
+        try:
+            result = self._client.count(collection_name=self.collection_name, exact=True)
+        except Exception as exc:
+            raise StorageError(
+                "Failed to count stored chunks in qdrant.",
+                error_code="vector_store_count_failed",
+            ) from exc
+        return int(result.count)
+
+    def close(self) -> None:
+        self._client.close()
+
+    def _list_documents(
+        self,
+        *,
+        query_filter: models.Filter | None = None,
+    ) -> list[DocumentSummary]:
         try:
             offset: int | str | uuid.UUID | models.PointId | None = None
             aggregated: dict[str, dict[str, object]] = {}
@@ -105,6 +182,7 @@ class QdrantVectorStore:
             while True:
                 records, offset = self._client.scroll(
                     collection_name=self.collection_name,
+                    scroll_filter=query_filter,
                     limit=128,
                     offset=offset,
                     with_payload=True,
@@ -124,9 +202,11 @@ class QdrantVectorStore:
                             "document_id": chunk.document_id,
                             "title": chunk.title,
                             "source": chunk.source,
+                            "source_type": chunk.source_type,
                             "tags": set(chunk.tags),
                             "chunk_count": 0,
                             "total_char_count": 0,
+                            "content_sha256": chunk.content_sha256,
                             "ingested_at": chunk.ingested_at,
                         },
                     )
@@ -139,6 +219,8 @@ class QdrantVectorStore:
                         current_tags.update(chunk.tags)
                     if current["ingested_at"] is None and chunk.ingested_at is not None:
                         current["ingested_at"] = chunk.ingested_at
+                    if not current["content_sha256"] and chunk.content_sha256:
+                        current["content_sha256"] = chunk.content_sha256
 
                 if offset is None:
                     break
@@ -153,9 +235,15 @@ class QdrantVectorStore:
                 document_id=str(item["document_id"]),
                 title=str(item["title"]),
                 source=item["source"] if item["source"] else None,
+                source_type=str(item["source_type"] or "inline_text"),
                 tags=sorted(str(tag) for tag in item["tags"]),
                 chunk_count=int(item["chunk_count"]),
                 total_char_count=int(item["total_char_count"]),
+                content_sha256=(
+                    str(item["content_sha256"])
+                    if item["content_sha256"] is not None
+                    else None
+                ),
                 ingested_at=(
                     str(item["ingested_at"])
                     if item["ingested_at"] is not None
@@ -164,24 +252,11 @@ class QdrantVectorStore:
             )
             for item in aggregated.values()
         ]
-        documents.sort(key=lambda item: ((item.ingested_at or ""), item.title.lower()), reverse=True)
+        documents.sort(
+            key=lambda item: ((item.ingested_at or ""), item.title.lower()),
+            reverse=True,
+        )
         return documents
-
-    def describe(self) -> str:
-        return f"qdrant-local:{self.collection_name}:{self.vector_size}d"
-
-    def count_chunks(self) -> int:
-        try:
-            result = self._client.count(collection_name=self.collection_name, exact=True)
-        except Exception as exc:
-            raise StorageError(
-                "Failed to count stored chunks in qdrant.",
-                error_code="vector_store_count_failed",
-            ) from exc
-        return int(result.count)
-
-    def close(self) -> None:
-        self._client.close()
 
     def _ensure_collection(self) -> None:
         try:
@@ -221,10 +296,12 @@ class QdrantVectorStore:
             "document_id": chunk.document_id,
             "title": chunk.title,
             "source": chunk.source,
+            "source_type": chunk.source_type,
             "tags": chunk.tags,
             "chunk_index": chunk.chunk_index,
             "text": chunk.text,
             "char_count": chunk.char_count,
+            "content_sha256": chunk.content_sha256,
             "ingested_at": chunk.ingested_at,
         }
 
@@ -241,9 +318,53 @@ class QdrantVectorStore:
             document_id=str(payload.get("document_id", "")),
             title=str(payload.get("title", "")),
             source=payload.get("source") if payload.get("source") else None,
+            source_type=str(payload.get("source_type", "inline_text")),
             tags=tags,
             chunk_index=int(payload.get("chunk_index", 0)),
             text=text,
             char_count=int(payload.get("char_count", len(text))),
+            content_sha256=str(payload.get("content_sha256", "")),
             ingested_at=str(ingested_at) if ingested_at else None,
         )
+
+    def _build_query_filter(
+        self,
+        *,
+        document_ids: list[str] | None = None,
+        tags: list[str] | None = None,
+        source: str | None = None,
+        content_sha256: str | None = None,
+    ) -> models.Filter | None:
+        must: list[models.Condition] = []
+        if document_ids:
+            must.append(
+                models.FieldCondition(
+                    key="document_id",
+                    match=models.MatchAny(any=document_ids),
+                )
+            )
+        if tags:
+            must.append(
+                models.FieldCondition(
+                    key="tags",
+                    match=models.MatchAny(any=tags),
+                )
+            )
+        if source:
+            must.append(
+                models.FieldCondition(
+                    key="source",
+                    match=models.MatchValue(value=source),
+                )
+            )
+        if content_sha256:
+            must.append(
+                models.FieldCondition(
+                    key="content_sha256",
+                    match=models.MatchValue(value=content_sha256),
+                )
+            )
+
+        if not must:
+            return None
+        return models.Filter(must=must)

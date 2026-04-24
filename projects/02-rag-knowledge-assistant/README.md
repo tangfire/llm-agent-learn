@@ -6,46 +6,60 @@
 
 - 复用 `01-fastapi-minimal-chat` 的工程骨架
 - 文本入库
+- 本地文件路径入库，支持多种常见文本格式
 - chunk 切分
 - embedding
 - qdrant 本地向量检索
 - 基于检索结果生成回答
 - 返回 citations 与 retrieved_chunks
 - `GET /documents` 文档元信息列表
+- `/ask` 支持 `tags` / `document_ids` 检索范围过滤
+- ingest 去重 / replace 策略
+- query trace 导出与最近决策回看
 - chunk 参数配置化与接口展示
 - 基础日志、错误分类、lifespan 初始化
 - 低相关度拒答
 - `status + debug` 检索调试信息
-- `8-10` 条测试问题、golden set、可复现本地 eval
+- `8-10` 条测试问题、golden set、failure cases、可复现本地 eval
 
 ## 当前说明
 
-今天这版已经从“能跑的 RAG V1”推进到了“Phase 2C 可靠版”。
+今天这版已经从“能跑的 RAG V1”推进到了 `Phase 2F` 的第一轮 hardening，更接近一个“可控、可回归、可继续扩展”的小型 RAG。
 
-- `POST /documents/text`：接收文本，切分 chunk，生成 embedding，并写入本地 qdrant
-- `GET /documents`：聚合已入库文档的元信息，返回文档数、标签、chunk 数、字符数、入库时间
-- `POST /ask`：对问题生成 query embedding，做向量检索，再返回 `answer`、`citations`、`retrieved_chunks`
-- `/ask` 增加 `status`，并支持通过 `return_debug=true` 返回检索调试信息
+- `POST /documents/text`：接收 inline text，支持 `ingest_strategy`，切分 chunk 并写入本地 qdrant
+- `POST /documents/file-path`：从本地文件路径读取内容，做格式归一化后再入库
+- `GET /documents`：聚合已入库文档的元信息，返回文档数、标签、`source_type`、chunk 数、字符数、入库时间
+- `POST /ask`：对问题生成 query embedding，支持 `tags` / `document_ids` 过滤，再返回 `answer`、`citations`、`retrieved_chunks`
+- `/ask` 增加 `status`，并支持通过 `return_debug=true` 返回检索调试信息和过滤范围
+- 每次 `/ask` 都会落一条 query trace，本地可通过 `GET /traces` 回看最近决策
 - 当 top1 score 低于阈值时会触发低相关度拒答，不再强行回答
+- 重复导入时可以选择 `keep_both`、`reject_duplicate`、`replace_existing`
 - `/health` 和 `/documents/text` 会展示当前生效的 `chunk_size` / `chunk_overlap`
 - 启动改成 `lifespan + app factory`，避免 import 时过早初始化本地 qdrant
 - 加了基础请求日志与更清晰的错误分类，便于排障和测试
+- 已把失败 case 纳入本地 eval 和 hardening regression，不再只看“能不能答对”
 - 配置了 `OPENAI_API_KEY` 时，embedding 走 OpenAI API，answer 走 OpenAI Responses API
 - 没有配置 key 时，embedding 走本地 hash fallback，answer 走本地 fallback
 
 ## RAG 流程
 
 ```text
-POST /documents/text
+POST /documents/text or /documents/file-path
+  -> loader / normalize
+  -> duplicate check (source / content sha256)
+  -> ingest strategy (keep_both / reject_duplicate / replace_existing)
   -> chunker
   -> embeddings
   -> qdrant local upsert
 
 POST /ask
   -> question embedding
-  -> qdrant vector search
+  -> qdrant vector search (+ optional document_ids / tags filter)
+  -> rerank / top_k crop
+  -> answered / no_hit / low_confidence decision
+  -> query trace export
   -> LLM answer
-  -> citations + retrieved_chunks
+  -> citations + retrieved_chunks + debug
 ```
 
 ## Phase 2B 这次补了什么
@@ -54,7 +68,7 @@ POST /ask
 
 现在不只是“把 chunk 塞进向量库”，而是能通过 `GET /documents` 看见已经入库了哪些文档。
 
-- 每个文档会聚合 `document_id`、`title`、`source`、`tags`
+- 每个文档会聚合 `document_id`、`title`、`source`、`source_type`、`tags`
 - 会返回 `chunk_count` 和 `total_char_count`
 - 会记录 `ingested_at`
 
@@ -156,11 +170,95 @@ POST /ask
 
 这说明阈值调优不是越高越好，而是要在“减少误答”和“减少误拒”之间找平衡。
 
+## Phase 2F 这次补了什么
+
+### 1. `/ask` 支持 `tags / document_ids` 过滤
+
+现在问答接口不再只能“全库检索”，而是可以显式缩小检索范围。
+
+- `document_ids`：只在指定文档里检索
+- `tags`：只在命中指定标签的文档里检索
+- `return_debug=true` 时会回传 `filtered_document_ids` 和 `filtered_tags`
+
+这一步的价值是：
+
+- 可以模拟真实知识库里的“租户隔离 / 资料域隔离 / 指定文档问答”
+- 当回答不准时，能更清楚地区分是“范围给错了”还是“召回质量不够”
+
+### 2. ingest 去重 / replace 策略
+
+现在重复导入不再默认把脏数据一层层堆进库里，而是先做冲突判断。
+
+- 冲突依据：相同 `source` 或相同内容的 `content_sha256`
+- `keep_both`：都保留
+- `reject_duplicate`：直接拒绝重复导入
+- `replace_existing`：先删旧文档再写新文档
+- 响应会回传 `dedupe_action` 和 `ingest_strategy`
+
+这一步的价值是：
+
+- 避免重复 chunk 污染检索结果
+- 让“重传同一份资料”从危险操作变成可控操作
+
+### 3. 不再只支持 inline text，已经补了多格式本地文件导入
+
+为了先把 ingest 做实，这版增加了 `POST /documents/file-path`。
+
+- 当前支持：`.txt`、`.md`、`.markdown`、`.log`、`.yaml`、`.yml`
+- 也支持：`.json`、`.jsonl`、`.csv`、`.html`、`.htm`
+- loader 会把 `json / jsonl / csv / html` 归一化成更适合 chunk 的纯文本
+- 返回结果里会带 `source_type`，例如 `file:.csv`
+
+这一步的价值是：
+
+- 项目已经不再局限于“只能手动贴一段文本”
+- 你开始接触真实 RAG 里很重要的一层：文档加载和清洗
+
+### 4. failure cases 被纳入回归，而不只是口头说明
+
+这版增加了明确的失败样例和 hardening regression。
+
+- `eval/failure_cases.json` 里记录了至少 `3` 个失败 case
+- `scripts/run_local_eval.py` 会同时跑测试问题、golden set、failure cases
+- `tests/test_hardening.py` 覆盖了过滤检索、replace、reject duplicate、CSV file-path ingest
+
+这一步的价值是：
+
+- 不只是“答对几个例子”，也能验证“错的时候怎么错”
+- 以后改 chunk、阈值、rerank、loader 时有最小回归底座
+
+### 5. query trace export，不再只靠日志猜问题
+
+现在每次 `/ask` 的关键决策都会落到本地 trace 文件里。
+
+- 记录字段包括问题、过滤条件、`top_k`、`best_score`、决策状态、拒答原因、citations
+- `return_debug=true` 时，响应里的 `debug.trace_id` 可以和 trace 记录对上
+- 新增 `GET /traces?limit=20`，可以回看最近几次检索决策
+
+这一步的价值是：
+
+- 出现误答、误拒或过滤范围问题时，不再只能翻日志猜测
+- 后面做阈值调优、loader 对比、rerank 实验时更容易复盘
+
+### 6. 当前边界也要讲清楚
+
+这版已经比最小 demo 扎实很多，但它还不是完整生产级 RAG。
+
+- 还没有浏览器 multipart 上传
+- 还没有 `PDF / DOCX` 解析器
+- 还没有异步 ingest pipeline、删除重建索引、版本管理
+- 还没有 hybrid retrieval、真正的 reranker、query rewrite
+- citations 还是 chunk 级，还没做到句子级 grounding
+
+这正好也是下一轮最值得补的方向。
+
 ## 当前接口
 
 - `GET /health`
 - `GET /documents`
+- `GET /traces`
 - `POST /documents/text`
+- `POST /documents/file-path`
 - `POST /ask`
 
 ## 关键模块拆分
@@ -169,11 +267,15 @@ POST /ask
 - `app/api/routes.py`：接口层，只负责接请求和调 service
 - `app/services/rag.py`：RAG 主流程，负责 ingest / retrieve / answer
 - `app/services/vector_store.py`：qdrant 适配与文档元信息聚合
+- `app/services/document_loader.py`：本地文件读取、格式归一化与基础清洗
+- `app/services/query_trace.py`：本地 query trace 导出与最近记录读取
 - `app/services/chunker.py`：chunk 切分策略
 - `app/core/config.py`：配置管理
 - `app/core/errors.py`：统一错误分类与响应
 - `eval/`：样例知识库、测试问题、golden set、baseline 结果
+- `eval/failure_cases.json`：失败 case 回归集
 - `scripts/run_local_eval.py`：本地可复现评测脚本
+- `tests/test_hardening.py`：Phase 2F hardening 回归测试
 
 ## 架构说明
 
@@ -181,6 +283,7 @@ POST /ask
 client
   -> FastAPI router
   -> RAGService
+      -> LocalDocumentLoader
       -> TextChunker
       -> Embedding (OpenAI or local hash)
       -> QdrantVectorStore
@@ -316,6 +419,30 @@ uvicorn app.main:app --reload --port 8001
 - `CHUNK_SIZE`：chunk 大小
 - `CHUNK_OVERLAP`：chunk 重叠长度
 - `LOW_CONFIDENCE_SCORE_THRESHOLD`：低相关度拒答阈值，默认 `0.25`
+- `QUERY_TRACE_PATH`：本地 query trace 导出文件路径
+
+## 当前文档加载能力
+
+当前项目支持两种 ingest 入口：
+
+- `POST /documents/text`：直接传文本
+- `POST /documents/file-path`：传本地绝对路径或相对路径，由服务端读取文件
+
+当前 `file-path` loader 支持：
+
+- `txt / md / markdown / log / yaml / yml`
+- `json / jsonl / csv / html / htm`
+
+这里故意先做 `file-path ingest`，而不是直接上浏览器上传，有两个工程上的考虑：
+
+- 当前依赖里还没有 `python-multipart`，先把 ingest 核心链路做扎实更划算
+- 先解决“文档怎么加载、怎么清洗、怎么去重”的核心问题，再加 HTTP upload 只是接口形态扩展
+
+当前仍不支持：
+
+- `PDF / DOCX` 解析
+- 对象存储下载
+- 浏览器表单上传
 
 ## 错误分类
 
@@ -342,7 +469,9 @@ uvicorn app.main:app --reload --port 8001
 - 服务实例不再在 import 阶段创建，而是在 app 启动时创建
 - `create_app(settings)` 可以在测试里传入临时 `qdrant_path`
 - 已补一组最小接口测试，覆盖 `/health`、`/documents`、空白问题校验、低相关度拒答
-- 已补本地 eval 脚本，可以把 fixture 文档和 golden set 跑成基线结果
+- 已补 hardening 回归，覆盖过滤检索、去重 / replace、拒绝重复导入、CSV file-path ingest
+- 已补 query trace 回归，验证 `/ask -> trace_id -> /traces` 这一条可复盘链路
+- 已补本地 eval 脚本，可以把 fixture 文档、golden set、failure cases 跑成基线结果
 
 运行测试：
 
@@ -364,7 +493,9 @@ python scripts/run_local_eval.py --output eval/results/local_eval_baseline.json
 
 - `10` 条测试问题
 - `6` 条 golden set
-- 本地 baseline 结果：`6/6` 通过
+- `3` 条 failure cases
+- `unittest` 当前 `11/11` 通过
+- 本地 baseline 结果：golden set `6/6` 通过，failure cases `3/3` 通过
 
 ## Curl
 
@@ -377,12 +508,28 @@ curl http://127.0.0.1:8001/documents
 ```
 
 ```bash
+curl "http://127.0.0.1:8001/traces?limit=5"
+```
+
+```bash
 curl -X POST http://127.0.0.1:8001/documents/text \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Redis Notes",
     "source": "redis-notes.md",
+    "tags": ["cache", "infra"],
+    "ingest_strategy": "replace_existing",
     "text": "Redis 是一个基于内存的数据结构存储系统，常用于缓存、消息队列、排行榜和分布式锁。"
+  }'
+```
+
+```bash
+curl -X POST http://127.0.0.1:8001/documents/file-path \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/absolute/path/to/knowledge.csv",
+    "tags": ["table", "kb"],
+    "ingest_strategy": "replace_existing"
   }'
 ```
 
@@ -390,8 +537,21 @@ curl -X POST http://127.0.0.1:8001/documents/text \
 curl -X POST http://127.0.0.1:8001/ask \
   -H "Content-Type: application/json" \
   -d '{
-    "question": "Redis 常见应用场景有哪些？",
+    "question": "Qdrant 支持什么过滤能力？",
     "top_k": 3,
+    "tags": ["table"],
+    "return_debug": true
+  }'
+```
+
+返回的 `debug.trace_id` 可以再拿去和 `/traces` 里的最近记录对照。
+
+```bash
+curl -X POST http://127.0.0.1:8001/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "这份文档主要讲了什么？",
+    "document_ids": ["doc_xxxxxxxxxxxx"],
     "return_debug": true
   }'
 ```

@@ -24,6 +24,9 @@ class Settings:
     qdrant_collection_name: str = os.getenv(
         "QDRANT_COLLECTION_NAME", "rag_knowledge_base"
     )
+    query_trace_path: str = os.getenv(
+        "QUERY_TRACE_PATH", "./data/traces/query_traces.jsonl"
+    )
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "500"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "100"))
     low_confidence_score_threshold: float = float(

@@ -42,6 +42,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Path to the golden set JSON.",
     )
     parser.add_argument(
+        "--failure-cases",
+        default="eval/failure_cases.json",
+        help="Path to the failure case JSON.",
+    )
+    parser.add_argument(
         "--top-k",
         type=int,
         default=3,
@@ -78,6 +83,8 @@ def run_question_set(
             AskRequest(
                 question=str(item["question"]),
                 top_k=int(item.get("top_k", default_top_k)),
+                document_ids=[str(value) for value in item.get("document_ids", [])],
+                tags=[str(value) for value in item.get("tags", [])],
                 return_debug=True,
             )
         )
@@ -105,6 +112,8 @@ def evaluate_golden_set(
             AskRequest(
                 question=str(item["question"]),
                 top_k=int(item.get("top_k", default_top_k)),
+                document_ids=[str(value) for value in item.get("document_ids", [])],
+                tags=[str(value) for value in item.get("tags", [])],
                 return_debug=True,
             )
         )
@@ -125,6 +134,49 @@ def evaluate_golden_set(
                 "best_score": response.debug.best_score if response.debug else None,
                 "passed": passed,
                 "note": item.get("note"),
+            }
+        )
+    return evaluations
+
+
+def evaluate_failure_cases(
+    service: RAGService,
+    failure_cases: list[dict[str, object]],
+    default_top_k: int,
+    document_id_by_source: dict[str, str],
+) -> list[dict[str, object]]:
+    evaluations: list[dict[str, object]] = []
+    for item in failure_cases:
+        document_ids = [str(value) for value in item.get("document_ids", [])]
+        if "document_source" in item:
+            source = str(item["document_source"])
+            if source in document_id_by_source:
+                document_ids.append(document_id_by_source[source])
+
+        response = service.ask(
+            AskRequest(
+                question=str(item["question"]),
+                top_k=int(item.get("top_k", default_top_k)),
+                document_ids=document_ids,
+                tags=[str(value) for value in item.get("tags", [])],
+                return_debug=True,
+            )
+        )
+        expected_status = str(item["expected_status"])
+        expected_reason = str(item.get("expected_reason") or "")
+        observed_reason = response.debug.rejection_reason if response.debug else ""
+        passed = response.status == expected_status and (
+            not expected_reason or observed_reason == expected_reason
+        )
+        evaluations.append(
+            {
+                "name": item.get("name"),
+                "question": item["question"],
+                "expected_status": expected_status,
+                "observed_status": response.status,
+                "expected_reason": expected_reason,
+                "observed_reason": observed_reason,
+                "passed": passed,
             }
         )
     return evaluations
@@ -153,6 +205,20 @@ def print_golden_summary(results: list[dict[str, object]]) -> None:
     print(f"\nSummary: {passed_count}/{total} passed")
 
 
+def print_failure_summary(results: list[dict[str, object]]) -> None:
+    passed_count = sum(1 for item in results if item["passed"])
+    total = len(results)
+    print("\n== Failure Cases ==")
+    for item in results:
+        status = "PASS" if item["passed"] else "FAIL"
+        print(
+            f"- [{status}] {item['name']} | expected={item['expected_status']} | "
+            f"observed={item['observed_status']} | expected_reason={item['expected_reason']} | "
+            f"observed_reason={item['observed_reason']}"
+        )
+    print(f"\nFailure Summary: {passed_count}/{total} passed")
+
+
 def main() -> int:
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -160,24 +226,38 @@ def main() -> int:
     documents = load_json(PROJECT_ROOT / args.documents)
     questions = load_json(PROJECT_ROOT / args.questions)
     golden_set = load_json(PROJECT_ROOT / args.golden_set)
+    failure_cases = load_json(PROJECT_ROOT / args.failure_cases)
 
     with TemporaryDirectory() as temp_dir:
         settings = Settings(
             app_name="RAG Knowledge Assistant Eval",
             qdrant_path=f"{temp_dir}/qdrant",
+            query_trace_path=f"{temp_dir}/query_traces.jsonl",
             openai_api_key=None,
             openai_base_url=None,
         )
         service = RAGService(settings)
         try:
             ingest_documents(service, documents)
+            document_id_by_source = {
+                item.source: item.document_id
+                for item in service.list_documents().documents
+                if item.source is not None
+            }
             question_results = run_question_set(service, questions, args.top_k)
             golden_results = evaluate_golden_set(service, golden_set, args.top_k)
+            failure_results = evaluate_failure_cases(
+                service,
+                failure_cases,
+                args.top_k,
+                document_id_by_source,
+            )
         finally:
             service.close()
 
     print_question_results(question_results)
     print_golden_summary(golden_results)
+    print_failure_summary(failure_results)
     if args.output:
         output_path = PROJECT_ROOT / args.output
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,9 +266,12 @@ def main() -> int:
                 {
                     "question_results": question_results,
                     "golden_results": golden_results,
+                    "failure_results": failure_results,
                     "summary": {
                         "passed": sum(1 for item in golden_results if item["passed"]),
                         "total": len(golden_results),
+                        "failure_passed": sum(1 for item in failure_results if item["passed"]),
+                        "failure_total": len(failure_results),
                     },
                 },
                 file,
@@ -196,7 +279,7 @@ def main() -> int:
                 indent=2,
             )
         print(f"\nSaved eval result to {output_path}")
-    return 0 if all(item["passed"] for item in golden_results) else 1
+    return 0 if all(item["passed"] for item in golden_results + failure_results) else 1
 
 
 if __name__ == "__main__":

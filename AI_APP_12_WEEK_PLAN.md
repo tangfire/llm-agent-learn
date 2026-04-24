@@ -143,13 +143,13 @@
 - [x] 有日志 / 错误处理 / 配置项
 - [x] 有评测问题集或验证方法
 - [x] 有 tradeoff 说明
-- [ ] 有简历 bullets
+- [x] 有简历 bullets
 
 ### Standout
 
 - [ ] 有优化前后对比表
-- [ ] 有失败案例与改进记录
-- [ ] 有 demo 视频或可复现演示链路
+- [x] 有失败案例与改进记录
+- [x] 有 demo 视频或可复现演示链路
 - [ ] 有明确的工程化亮点
 - [ ] 有一两个“别人一般不会做”的增强点
 
@@ -165,10 +165,15 @@
 - [x] `02` 已打通第一版 RAG 闭环
 - [x] `02` 已接入本地 `qdrant`
 - [x] `02` 已支持文本入库与问答检索
+- [x] `02` 已支持 tags / document_ids 检索范围过滤
+- [x] `02` 已支持重复导入去重 / replace 与 failure-case regression
+- [x] `02` 已支持多格式本地文件路径 ingest（不再只限 inline text）
+- [x] `02` 已支持 query trace 导出与最近决策回看
 
 ### 当前最重要缺口
 
 - [ ] `02` 还没到“简历级 / 面试级”
+- [ ] `02` 还缺 `PDF / DOCX` 解析、hybrid retrieval、版本管理与更完整观测链路
 - [ ] 还没有 `03` Agent / Workflow 项目
 - [ ] 还没有形成系统化的 `RAG + Agent + 底层原理` 知识闭环
 - [ ] 还没有进入面试表达和投递节奏
@@ -335,24 +340,37 @@
 - [x] 写清楚 chunk 的取值权衡
 - [x] 写清楚 citations 的价值
 - [x] 写清楚优化前后变化
-- [ ] 输出 2-3 条简历 bullets
+- [x] 输出 2-3 条简历 bullets
 
 #### Phase 2E: 站上竞争力档位
 
-- [ ] 增加 metadata filter 或文档标签过滤
+- [x] 增加 metadata filter 或文档标签过滤
 - [ ] 尝试 hybrid retrieval 或至少给出设计方案
-- [ ] 增加文档版本意识或更新策略说明
-- [ ] 增加失败 case 记录
+- [x] 增加文档 replace / 去重策略，并补充更新策略说明
+- [x] 增加失败 case 记录
 - [x] 输出一份小型 eval / benchmark 结果
-- [ ] 写出项目中的系统瓶颈和后续优化方向
+- [x] 写出项目中的系统瓶颈和后续优化方向
 
 #### Phase 2F: 从 demo 走向更像真实系统
 
-- [ ] 为 ingest 增加去重 / replace 策略，避免重复入库污染检索
-- [ ] 为 `/ask` 增加 tags / document_ids 过滤，缩小检索范围
-- [ ] 固化阈值调优记录，说明为什么 `0.25` 比 `0.30` 更合适
-- [ ] 增加 query trace 导出，便于复盘 `top_k / threshold / score / decision`
-- [ ] 建立至少 3 个失败 case，并持续做回归验证
+- [x] 为 ingest 增加去重 / replace 策略，避免重复入库污染检索
+- [x] 为 `/ask` 增加 tags / document_ids 过滤，缩小检索范围
+- [x] 固化阈值调优记录，说明为什么 `0.25` 比 `0.30` 更合适
+- [x] 增加 query trace 导出，便于复盘 `top_k / threshold / score / decision`
+- [x] 建立至少 3 个失败 case，并持续做回归验证
+- [x] 支持本地文件路径 ingest 与多格式 loader，先把文档输入层做厚一点
+
+#### Phase 2G: 把 RAG 做深，不只做通
+
+这一阶段决定项目是不是还停留在“玩具味道”，重点是把 ingest、retrieval、eval、observability 分层做细。
+
+- [ ] 支持 `PDF / DOCX / HTML` 上传与解析，不只靠手工文本和本地路径
+- [ ] 做文档清洗、标题感知 chunking、parent-child retrieval
+- [ ] 增加 hybrid retrieval（`BM25 + vector`）与更强 reranker
+- [ ] 增加 query rewrite / multi-query / query routing
+- [ ] 增加异步 ingest、删除 / 重建索引、版本 / freshness 管理
+- [ ] 增加 trace / latency / cost / recall / correctness 观测
+- [ ] 做 sentence-level citations、grounding check、hallucination guard
 
 #### Must Understand
 
@@ -803,14 +821,35 @@
 - [x] 为 `/ask` 增加 `status + debug` 调试信息
 - [x] 增加本地 golden set 与可复现 eval 脚本
 - [x] 产出一份 baseline eval 结果文件
+- [x] 为 `/ask` 增加 query trace 导出与最近 trace 查看接口
 
-### Next Hardening Checklist
+### Next RAG Deepening Checklist
 
-- [ ] 增加 tags / document_ids 过滤，把检索范围收窄到指定文档
-- [ ] 增加重复导入去重或 replace 机制
-- [ ] 记录 3 个以上失败 case，并把它们加入回归集
-- [ ] 输出 2-3 条简历 bullets
-- [ ] 写一版系统瓶颈与后续优化方向说明
+- [x] 增加 tags / document_ids 过滤，把检索范围收窄到指定文档
+- [x] 增加重复导入去重或 replace 机制
+- [x] 记录 3 个以上失败 case，并把它们加入回归集
+- [x] 输出 2-3 条简历 bullets
+- [x] 写一版系统瓶颈与后续优化方向说明
+- [ ] 支持 `PDF / DOCX` 解析与浏览器上传
+- [ ] 增加 heading-aware / parent-child chunking
+- [ ] 尝试 hybrid retrieval（`BM25 + vector`）
+- [ ] 增加 query rewrite / multi-query / rerank 模型
+- [ ] 增加异步 ingest、删除重建索引、版本与 freshness 机制
+- [ ] 增加 trace / latency / cost / recall 观测
+
+### `02` 当前可用简历 Bullets
+
+- 用 `FastAPI + Qdrant` 搭建本地 RAG knowledge assistant，支持文本与多格式本地文件入库、chunk 切分、向量检索、citations 返回与低相关度拒答。
+- 为检索链路增加 `tags / document_ids` 范围过滤、重复导入 `replace / reject` 策略与 chunk / score debug 信息，降低脏数据污染和误检索范围。
+- 建立本地 eval baseline 与 failure-case regression，沉淀 `10` 条测试问题、`6` 条 golden set、`3` 条 failure cases，用于阈值调优和回归验证。
+
+### `02` 当前系统瓶颈与下一轮优化方向
+
+- 文档输入层：现在已经不只支持 inline text，但还缺 `PDF / DOCX` 解析、浏览器上传、对象存储拉取。
+- 文档处理层：chunk 仍以基础切分为主，还没做标题感知、表格保真、parent-child 或语义边界切分。
+- 检索层：当前以向量检索加本地 rerank 为主，还缺 `BM25 + vector` hybrid retrieval、query rewrite、learned reranker。
+- 质量层：已经有 golden set 和 failure cases，但数据规模还小，citations 还是 chunk 级，还没做更细的 grounding 检查。
+- 工程层：还缺异步 ingest pipeline、删除 / 重建索引、版本 / freshness 策略，以及 latency / cost / recall 观测。
 
 ## 竞争力检查点
 
@@ -827,8 +866,8 @@
 
 - [ ] 能手写最小 RAG 和最小 Agent
 - [ ] 能用框架但不依赖框架
-- [ ] 项目有评测、观测、失败兜底
-- [ ] 能讲清 tradeoff 和系统边界
+- [x] 项目有评测、观测、失败兜底
+- [x] 能讲清 tradeoff 和系统边界
 
 ### 明显强于普通候选人
 
